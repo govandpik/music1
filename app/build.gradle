@@ -56,8 +56,7 @@ android {
         targetSdkVersion versions.targetSdk
 
         versionName versions.name
-        versionCode generateVersionCode()
-        // Add 3200 to account for moving to github and resetting commit count.
+        versionCode 5000
 
         resConfigs "en", "zh-rCN", "fr", "de", "ko", "it", "ru", "nl", "tr", "pl", "hu", "uk", "bg-rBG", "en-rGB", "vi", "pt-rBR", "es", "en-rNZ", "zh-rTW", "es-rES", "hr", "en-rAU", "eu-rES", "th"
 
@@ -114,11 +113,27 @@ android {
         def debugFilters = ["paid", "free", 'amazonPaid', "amazonFree"]
         def relFilters = ["dev", "devPre21"]
 
+        if (System.getenv("TRAVIS")) {
+            relFilters << "amazonPaid"
+            relFilters << "amazonFree"
+        }
+
         def filter = { name -> names.contains(name) }
         def debugIgnore = buildTypes.contains("debug") && debugFilters.stream().anyMatch(filter)
         def releaseIgnore = buildTypes.contains("release") && relFilters.stream().anyMatch(filter)
 
         setIgnore(debugIgnore || releaseIgnore)
+    }
+
+    // Set the version code for release builds
+    applicationVariants.all { variant ->
+        if (variant.buildType.name == "release") {
+            def newVersionCode = generateVersionCode()
+            variant.outputs.all { output ->
+                output.setVersionCodeOverride(newVersionCode)
+            }
+            variant.mergedFlavor.versionCode = newVersionCode
+        }
     }
 
     // Used to enable Java8 features
@@ -138,6 +153,8 @@ android {
 
             //Enable multiDex for debug builds, since they don't use proguard
             multiDexEnabled true
+
+            resConfigs "en", "xxhdpi"
         }
 
         paid {
@@ -195,6 +212,7 @@ android {
 }
 
 dependencies {
+
     implementation fileTree(include: '*.jar', dir: 'libs')
 
     // //////////////////////////////////////////////////////////////////////////
@@ -209,6 +227,7 @@ dependencies {
     implementation libs.recyclerView
     implementation libs.supportv4
     implementation libs.firebaseCore
+    implementation libs.firebaseRemoteConfig
     implementation libs.constraintLayout
     implementation libs.chromecast
 
@@ -297,13 +316,23 @@ configurations.all {
     }
 }
 
+class Globals {
+    static int versionCode = -1
+}
+
 static int generateVersionCode() {
-    def versionCode = 5000
-    if (System.getenv("TRAVIS_BUILD_NUMBER")) {
-        versionCode += System.getenv("TRAVIS_BUILD_NUMBER").toInteger()
+    if (Globals.versionCode == -1) {
+        def versionCode = 5000
+        if (System.getenv("TRAVIS_BUILD_NUMBER")) {
+            def travisBuildNumber = System.getenv("TRAVIS_BUILD_NUMBER").toInteger()
+            println "Travis build number: $travisBuildNumber"
+            versionCode += travisBuildNumber
+        }
+        println "Version code: $versionCode"
+        Globals.versionCode = versionCode
+        return versionCode
     }
-    println "Version code: $versionCode"
-    return versionCode
+    return Globals.versionCode
 }
 
 static String getPlayStoreTrack() {
@@ -331,3 +360,5 @@ play {
     serviceAccountEmail = 'app-deployment@api-5801704373554614142-812229.iam.gserviceaccount.com'
     jsonFile = file('../deployment_keys.json')
 }
+
+apply plugin: 'com.google.gms.google-services'
